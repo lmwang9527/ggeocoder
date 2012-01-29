@@ -1,1 +1,24 @@
 An independent geocoder using Google Maps API v3 that does reverse geocoding and supports access through proxy.
+
+Examples:
+In [1]: from google import Google
+In [2]: GOOGLE_KEY = None
+In [3]: ggeocoder = Google(GOOGLE_KEY, output_format='json')
+In [4]: address_str = "1600 Pennsylvania Ave, Washington DC"
+In [5]: results = ggeocoder.geocode(address_str)
+In [6]: results[0]
+Out[6]: u'1600 Pennsylvania Ave NW, Washington, DC 20500, USA'
+In [7]: results[1]
+Out[7]: (38.8987149, -77.0376555)
+In [8]: results[2].keys()
+Out[8]: [u'geometry', u'address_components', u'partial_match', u'formatted_address', u'types']
+
+In [9]: coord = (38.8987149, -77.0376555)
+In [10]: results = ggeocoder.reverse(coord)
+In [11]: results[0]
+Out[11]: u'1600 Pennsylvania Ave NW, Washington, DC 20500, USA'
+In [12]: results[1]
+Out[12]: (38.8987149, -77.0376555)
+In [13]: results[2].keys()
+Out[13]: [u'geometry', u'address_components', u'formatted_address', u'types']
+
