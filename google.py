@@ -1,5 +1,6 @@
 from urllib import urlencode
 from urllib2 import urlopen
+import urllib2
 import logging
 
 logger = logging.getLogger("ggeocoder")
@@ -15,8 +16,12 @@ except ImportError:
 class Google(object):
     """Geocoder using the Google Maps API."""
     
-    def __init__(self, api_key=None, domain='maps.googleapis.com',
-                 resource=None, format_string='%s', output_format='json',
+    def __init__(self, api_key=None, 
+                 domain='maps.googleapis.com',
+                 proxy=None,
+                 resource=None, 
+                 format_string='%s', 
+                 output_format='json',
                  sensor=False
                 ):
         """
@@ -54,6 +59,10 @@ class Google(object):
                  'and now ignored. The Google-supported "maps/geo" API will be used.', DeprecationWarning)
 
         self.api_key = api_key
+        proxy = {'http':proxy} if proxy is not None else {}
+        proxy_support = urllib2.ProxyHandler(proxy)
+        self.opener = urllib2.build_opener(proxy_support)
+
         self.domain = domain
         self.format_string = format_string
         self.sensor = str(sensor).lower()
@@ -71,8 +80,18 @@ class Google(object):
         domain = self.domain.strip('/')
         return "http://%s/maps/api/geocode/%s?%%s" % (domain, self.output_format)
 
-    def geocode(self, string, exactly_one=True):
-        params = {'address': self.format_string % string,
+    def geocode(self, address, exactly_one=True):
+        """
+        Geocode an address string with Google Maps API.
+
+        ``address`` (required) address string to be gecoded.
+
+        Return:
+            A tuple of (formatted_address, (lat, lng), results_dict) if exactly_one is True; a list of              these tuples otherwise.
+
+        Raise an exception with original google.maps.GeocoderStatus code if it is not "OK".
+        """
+        params = {'address': self.format_string % address,
                   'sensor': self.sensor,
                   }
         
@@ -82,21 +101,34 @@ class Google(object):
         url = self.url % urlencode(params)
         return self.geocode_url(url, exactly_one)
 
-    def reverse(self, coord, exactly_one=True):
+    def reverse(self, coord):
+        """
+        Reverse geocode a (lat, lng) coordinate with Google Maps API.
+
+        ``coord`` (required) coordinate to be reverse geocoded in the format of (lat, lng).
+
+        **Return**
+
+            A tuple of (formatted_address, (lat, lng), results_dict).
+
+         Raise an exception with original google.maps.GeocoderStatus code if it is not "OK".
+        """
+
         (lat,lng) = coord
         params = {'latlng': self.format_string % lat+','+self.format_string % lng,
                   'sensor': self.sensor,
                  }
 
         url = self.url % urlencode(params)
-        return self.geocode_url(url, exactly_one)
+        return self.geocode_url(url, exactly_one=True)
 
     def geocode_url(self, url, exactly_one=True):
         ## preserve "," in the query url
         url = url.replace("%2C", ",")
         logger.debug("Fetching %s..." % url)
 
-        page = urlopen(url)
+        req=urllib2.Request(url)
+        page=self.opener.open(req)
         
         dispatch = getattr(self, 'parse_' + self.output_format)
         status, results = dispatch(page, exactly_one)
@@ -104,7 +136,7 @@ class Google(object):
         return results
 
     def parse_json(self, page, exactly_one=True):
-        ##TODO: decode page
+        ##TODO: decode page?
         doc = json.loads(page.read())
         results = doc.get('results', [])
         status_code = doc.get("status", 'Empty status')
@@ -127,7 +159,7 @@ class Google(object):
 
     def check_status_code(self, status_code):
         if status_code != 'OK':
-            raise GeocoderResultError(status_code)
+            raise status_code
 
 import unittest
 from random import sample
@@ -140,16 +172,16 @@ class TestGoogleGeocoder(unittest.TestCase):
 
     def test_geocoding(self):
         address_str = "1600 Pennsylvania Ave, Washington DC"
-        coord = (38.8976777, -77.036517)
-        address = u"1600 Pennsylvania Ave NW, Washington, DC 20502, USA"
+        coord = (38.8987149, -77.0376555)
+        address = u"1600 Pennsylvania Ave NW, Washington, DC 20500, USA"
         results = self.geocoder.geocode(address_str)
         assert len(results) == 3
         assert results[0] == address
         assert np.allclose( np.array(results[1]), np.array(coord), atol=1e-3 )
 
     def test_reverse_geocoding(self):
-        coord = (38.8976777, -77.036517)
-        address = u"1600 Pennsylvania Ave NW, Washington, DC 20502, USA"
+        coord = (38.8987149, -77.0376555)
+        address = u"1600 Pennsylvania Ave NW, Washington, DC 20500, USA"
         results = self.geocoder.reverse(coord)
         assert len(results) == 3
         assert results[0] == address
